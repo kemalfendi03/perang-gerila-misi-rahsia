@@ -23,17 +23,30 @@ jobs:
           find / -type d -name "platform-tools" 2>/dev/null | head -10
           echo "Checking Java..."
           java -version
-
-      - name: Install Godot export templates
+- name: Install Godot export templates
         shell: bash
         run: |
-          mkdir -p /github/home/.local/share/godot/export_templates
-          cd /tmp
+          set -e
+
+          mkdir -p /tmp/godot-templates
+          cd /tmp/godot-templates
+
           wget -q https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_export_templates.tpz
-          mkdir -p templates
-          unzip -q Godot_v4.4.1-stable_export_templates.tpz -d templates
+
+          unzip -q Godot_v4.4.1-stable_export_templates.tpz -d extracted
+
           mkdir -p /github/home/.local/share/godot/export_templates/4.4.1.stable
-          cp -r templates/templates/* /github/home/.local/share/godot/export_templates/4.4.1.stable/
+
+          DEBUG_TEMPLATE="$(find extracted -type f -name android_debug.apk -print -quit)"
+          RELEASE_TEMPLATE="$(find extracted -type f -name android_release.apk -print -quit)"
+
+          test -n "$DEBUG_TEMPLATE"
+          test -n "$RELEASE_TEMPLATE"
+
+          cp "$DEBUG_TEMPLATE" /github/home/.local/share/godot/export_templates/4.4.1.stable/android_debug.apk
+          cp "$RELEASE_TEMPLATE" /github/home/.local/share/godot/export_templates/4.4.1.stable/android_release.apk
+
+          ls -lh /github/home/.local/share/godot/export_templates/4.4.1.stable/
 
       - name: Create game project
         shell: bash
