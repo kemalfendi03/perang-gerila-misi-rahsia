@@ -251,18 +251,32 @@ jobs:
           package/name="Perang Gerila Malaysia"
           package/signed=true
           EOF
+- name: Configure Java and Godot
+  shell: bash
+  run: |
+  mkdir -p /github/home/.config/godot
+  mkdir -p /github/home/.android
+  
+      JAVA_PATH="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
 
-      - name: Configure Java and Godot
-        shell: bash
-        run: |
-          mkdir -p /github/home/.config/godot
-          JAVA_PATH="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
-          cat > /github/home/.config/godot/editor_settings-4.tres <<EOF
-          [gd_resource type="EditorSettings" format=3]
-          [resource]
-          export/android/java_sdk_path = "$JAVA_PATH"
-          EOF
+    keytool -genkeypair -v \
+      -keystore /github/home/.android/debug.keystore \
+      -storepass android \
+      -alias androiddebugkey \
+      -keypass android \
+      -dname "CN=Android Debug,O=Android,C=US" \
+      -keyalg RSA \
+      -keysize 2048 \
+      -validity 10000
 
+    cat > /github/home/.config/godot/editor_settings-4.tres <<EOF
+    [gd_resource type="EditorSettings" format=3]
+    [resource]
+    export/android/java_sdk_path = "$JAVA_PATH"
+    export/android/debug_keystore = "/github/home/.android/debug.keystore"
+    export/android/debug_keystore_user = "androiddebugkey"
+    export/android/debug_keystore_pass = "android"
+    EOF
       - name: Import project
         shell: bash
         run: godot --headless --editor --path game --quit
