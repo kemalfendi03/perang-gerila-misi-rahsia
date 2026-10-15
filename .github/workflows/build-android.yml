@@ -1,305 +1,320 @@
 name: Build Perang Gerila APK
 
 on:
-  workflow_dispatch:
+workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    container:
-      image: barichello/godot-ci:4.4.1
+build:
+runs-on: ubuntu-latest
+container:
+image: barichello/godot-ci:4.4.1
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
-      - name: Install Android requirements
-        shell: bash
-        run: |
-          apt-get update
-          apt-get install -y openjdk-17-jdk unzip wget
+  - name: Install Android requirements
+    shell: bash
+    run: |
+      set -eux
+      apt-get update
+      apt-get install -y openjdk-17-jdk unzip wget
 
-          echo "Checking Android SDK..."
-          find / -type d -name "platform-tools" 2>/dev/null | head -10
-          echo "Checking Java..."
-          java -version
-- name: Install Godot export templates
-        shell: bash
-        run: |
-          set -e
+      echo "Checking Java..."
+      java -version
 
-          mkdir -p /tmp/godot-templates
-          cd /tmp/godot-templates
+      echo "Checking Android SDK..."
+      find / -type f -name adb 2>/dev/null | head -10 || true
 
-          wget -q https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_export_templates.tpz
+  - name: Install Godot export templates
+    shell: bash
+    run: |
+      set -eux
 
-          unzip -q Godot_v4.4.1-stable_export_templates.tpz -d extracted
+      mkdir -p /github/home/.local/share/godot/export_templates/4.4.1.stable
+      cd /tmp
 
-          mkdir -p /github/home/.local/share/godot/export_templates/4.4.1.stable
+      wget -q https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_export_templates.tpz
 
-          DEBUG_TEMPLATE="$(find extracted -type f -name android_debug.apk -print -quit)"
-          RELEASE_TEMPLATE="$(find extracted -type f -name android_release.apk -print -quit)"
+      unzip -q Godot_v4.4.1-stable_export_templates.tpz -d godot_templates
 
-          test -n "$DEBUG_TEMPLATE"
-          test -n "$RELEASE_TEMPLATE"
+      DEBUG_TEMPLATE="$(find godot_templates -type f -name android_debug.apk -print -quit)"
+      RELEASE_TEMPLATE="$(find godot_templates -type f -name android_release.apk -print -quit)"
 
-          cp "$DEBUG_TEMPLATE" /github/home/.local/share/godot/export_templates/4.4.1.stable/android_debug.apk
-          cp "$RELEASE_TEMPLATE" /github/home/.local/share/godot/export_templates/4.4.1.stable/android_release.apk
+      test -n "$DEBUG_TEMPLATE"
+      test -n "$RELEASE_TEMPLATE"
 
-          ls -lh /github/home/.local/share/godot/export_templates/4.4.1.stable/
+      cp "$DEBUG_TEMPLATE" /github/home/.local/share/godot/export_templates/4.4.1.stable/android_debug.apk
+      cp "$RELEASE_TEMPLATE" /github/home/.local/share/godot/export_templates/4.4.1.stable/android_release.apk
 
-      - name: Create game project
-        shell: bash
-        run: |
-          mkdir -p game build
+      ls -lh /github/home/.local/share/godot/export_templates/4.4.1.stable/
 
-          cat > game/project.godot <<'EOF'
-          config_version=5
+  - name: Create game project
+    shell: bash
+    run: |
+      set -eux
+      mkdir -p game build
 
-          [application]
-          config/name="Perang Gerila Malaysia"
-          run/main_scene="res://main.tscn"
+      cat > game/project.godot <<'EOF'
+      config_version=5
 
-          [display]
-          window/size/viewport_width=1280
-          window/size/viewport_height=720
+      [application]
+      config/name="Perang Gerila Malaysia"
+      run/main_scene="res://main.tscn"
 
-          [rendering]
-          renderer/rendering_method="gl_compatibility"
-          renderer/rendering_method.mobile="gl_compatibility"
-          EOF
+      [display]
+      window/size/viewport_width=1280
+      window/size/viewport_height=720
 
-          cat > game/main.tscn <<'EOF'
-          [gd_scene load_steps=2 format=3]
+      [rendering]
+      renderer/rendering_method="gl_compatibility"
+      renderer/rendering_method.mobile="gl_compatibility"
+      EOF
 
-          [ext_resource type="Script" path="res://main.gd" id="1"]
+      cat > game/main.tscn <<'EOF'
+      [gd_scene load_steps=2 format=3]
 
-          [node name="Main" type="Node3D"]
-          script = ExtResource("1")
-          EOF
+      [ext_resource type="Script" path="res://main.gd" id="1"]
 
-          cat > game/main.gd <<'EOF'
-          extends Node3D
+      [node name="Main" type="Node3D"]
+      script = ExtResource("1")
+      EOF
 
-          var player: CharacterBody3D
-          var enemies: Array[Node3D] = []
-          var score := 0
-          var movement := Vector2.ZERO
-          var hud: Label
+      cat > game/main.gd <<'EOF'
+      extends Node3D
 
-          func _ready():
-              randomize()
-              make_world()
-              make_player()
-              make_enemies()
-              make_hud()
+      var player: CharacterBody3D
+      var enemies: Array[Node3D] = []
+      var score := 0
+      var movement := Vector2.ZERO
+      var hud: Label
 
-          func make_world():
-              var ground = MeshInstance3D.new()
-              var plane = PlaneMesh.new()
-              plane.size = Vector2(100, 100)
-              ground.mesh = plane
-              var material = StandardMaterial3D.new()
-              material.albedo_color = Color(0.12, 0.25, 0.10)
-              ground.material_override = material
-              add_child(ground)
+      func _ready():
+          randomize()
+          make_world()
+          make_player()
+          make_enemies()
+          make_hud()
 
-              var light = DirectionalLight3D.new()
-              light.rotation_degrees = Vector3(-55, -25, 0)
-              add_child(light)
+      func make_world():
+          var ground = MeshInstance3D.new()
+          var plane = PlaneMesh.new()
+          plane.size = Vector2(100, 100)
+          ground.mesh = plane
 
-              for i in range(30):
-                  var tree = MeshInstance3D.new()
-                  var trunk = CylinderMesh.new()
-                  trunk.top_radius = 0.18
-                  trunk.bottom_radius = 0.3
-                  trunk.height = 3.0
-                  tree.mesh = trunk
-                  tree.position = Vector3(randf_range(-35, 35), 1.5, randf_range(-35, 35))
-                  var bark = StandardMaterial3D.new()
-                  bark.albedo_color = Color(0.25, 0.14, 0.07)
-                  tree.material_override = bark
-                  add_child(tree)
+          var material = StandardMaterial3D.new()
+          material.albedo_color = Color(0.12, 0.25, 0.10)
+          ground.material_override = material
+          add_child(ground)
 
-          func make_player():
-              player = CharacterBody3D.new()
-              player.position = Vector3(0, 1, 0)
-              add_child(player)
+          var light = DirectionalLight3D.new()
+          light.rotation_degrees = Vector3(-55, -25, 0)
+          add_child(light)
 
-              var body = MeshInstance3D.new()
-              var capsule = CapsuleMesh.new()
-              body.mesh = capsule
+          for i in range(30):
+              var tree = MeshInstance3D.new()
+              var trunk = CylinderMesh.new()
+              trunk.top_radius = 0.18
+              trunk.bottom_radius = 0.3
+              trunk.height = 3.0
+              tree.mesh = trunk
+              tree.position = Vector3(randf_range(-35, 35), 1.5, randf_range(-35, 35))
+
+              var bark = StandardMaterial3D.new()
+              bark.albedo_color = Color(0.25, 0.14, 0.07)
+              tree.material_override = bark
+              add_child(tree)
+
+      func make_player():
+          player = CharacterBody3D.new()
+          player.position = Vector3(0, 1, 0)
+          add_child(player)
+
+          var body = MeshInstance3D.new()
+          body.mesh = CapsuleMesh.new()
+
+          var uniform = StandardMaterial3D.new()
+          uniform.albedo_color = Color(0.2, 0.35, 0.15)
+          body.material_override = uniform
+          player.add_child(body)
+
+          var collision = CollisionShape3D.new()
+          collision.shape = CapsuleShape3D.new()
+          player.add_child(collision)
+
+          var camera = Camera3D.new()
+          camera.position = Vector3(0, 3.5, 7)
+          camera.rotation_degrees = Vector3(-18, 0, 0)
+          player.add_child(camera)
+          camera.current = true
+
+      func make_enemies():
+          for i in range(6):
+              var enemy = Node3D.new()
+              enemy.position = Vector3(randf_range(-15, 15), 0.9, randf_range(-15, 15))
+              add_child(enemy)
+
+              var model = MeshInstance3D.new()
+              model.mesh = CapsuleMesh.new()
+
               var uniform = StandardMaterial3D.new()
-              uniform.albedo_color = Color(0.2, 0.35, 0.15)
-              body.material_override = uniform
-              player.add_child(body)
+              uniform.albedo_color = Color(0.7, 0.12, 0.1)
+              model.material_override = uniform
+              enemy.add_child(model)
+              enemies.append(enemy)
 
-              var collision = CollisionShape3D.new()
-              var shape = CapsuleShape3D.new()
-              collision.shape = shape
-              player.add_child(collision)
+      func make_hud():
+          var layer = CanvasLayer.new()
+          add_child(layer)
 
-              var camera = Camera3D.new()
-              camera.position = Vector3(0, 3.5, 7)
-              camera.rotation_degrees = Vector3(-18, 0, 0)
-              player.add_child(camera)
-              camera.current = true
+          hud = Label.new()
+          hud.position = Vector2(20, 20)
+          hud.add_theme_font_size_override("font_size", 24)
+          layer.add_child(hud)
+          update_hud()
 
-          func make_enemies():
-              for i in range(6):
-                  var enemy = Node3D.new()
-                  enemy.position = Vector3(randf_range(-15, 15), 0.9, randf_range(-15, 15))
-                  add_child(enemy)
+          add_button(layer, "MAJU", Vector2(30, 450), "up")
+          add_button(layer, "UNDUR", Vector2(30, 530), "down")
+          add_button(layer, "KIRI", Vector2(150, 530), "left")
+          add_button(layer, "KANAN", Vector2(150, 450), "right")
 
-                  var model = MeshInstance3D.new()
-                  model.mesh = CapsuleMesh.new()
-                  var uniform = StandardMaterial3D.new()
-                  uniform.albedo_color = Color(0.7, 0.12, 0.1)
-                  model.material_override = uniform
-                  enemy.add_child(model)
-                  enemies.append(enemy)
+          var fire = Button.new()
+          fire.text = "TEMBAK"
+          fire.position = Vector2(950, 500)
+          fire.size = Vector2(200, 80)
+          layer.add_child(fire)
+          fire.pressed.connect(shoot)
 
-          func make_hud():
-              var layer = CanvasLayer.new()
-              add_child(layer)
+      func add_button(layer, title, pos, direction):
+          var button = Button.new()
+          button.text = title
+          button.position = pos
+          button.size = Vector2(110, 65)
+          layer.add_child(button)
+          button.button_down.connect(func(): set_direction(direction, true))
+          button.button_up.connect(func(): set_direction(direction, false))
 
-              hud = Label.new()
-              hud.position = Vector2(20, 20)
-              hud.add_theme_font_size_override("font_size", 24)
-              layer.add_child(hud)
+      func set_direction(direction, active):
+          var value = 1.0 if active else 0.0
+
+          if direction == "up":
+              movement.y = -value
+          elif direction == "down":
+              movement.y = value
+          elif direction == "left":
+              movement.x = -value
+          elif direction == "right":
+              movement.x = value
+
+      func _physics_process(delta):
+          if player == null:
+              return
+
+          player.velocity.x = movement.x * 5.0
+          player.velocity.z = movement.y * 5.0
+          player.velocity.y -= 20.0 * delta
+          player.move_and_slide()
+
+          for enemy in enemies:
+              if is_instance_valid(enemy):
+                  var direction = player.global_position - enemy.global_position
+                  direction.y = 0
+
+                  if direction.length() > 1.5 and direction.length() < 15:
+                      enemy.global_position += direction.normalized() * delta
+
+      func shoot():
+          var target: Node3D = null
+          var nearest = 15.0
+
+          for enemy in enemies:
+              if is_instance_valid(enemy):
+                  var distance = enemy.global_position.distance_to(player.global_position)
+
+                  if distance < nearest:
+                      nearest = distance
+                      target = enemy
+
+          if target != null:
+              enemies.erase(target)
+              target.queue_free()
+              score += 1
               update_hud()
 
-              add_button(layer, "MAJU", Vector2(30, 450), "up")
-              add_button(layer, "UNDUR", Vector2(30, 530), "down")
-              add_button(layer, "KIRI", Vector2(150, 530), "left")
-              add_button(layer, "KANAN", Vector2(150, 450), "right")
+      func update_hud():
+          if hud:
+              hud.text = "PERANG GERILA MALAYSIA\nMusuh ditumpaskan: " + str(score)
+      EOF
 
-              var fire = Button.new()
-              fire.text = "TEMBAK"
-              fire.position = Vector2(950, 500)
-              fire.size = Vector2(200, 80)
-              layer.add_child(fire)
-              fire.pressed.connect(shoot)
+      cat > game/export_presets.cfg <<'EOF'
+      [preset.0]
+      name="Android"
+      platform="Android"
+      runnable=true
+      advanced_options=false
+      dedicated_server=false
+      custom_features=""
+      export_filter="all_resources"
+      include_filter=""
+      exclude_filter=""
+      export_path="../build/PerangGerila.apk"
+      encryption_include_filters=""
+      encryption_exclude_filters=""
+      encrypt_pck=false
+      encrypt_directory=false
 
-          func add_button(layer, title, pos, direction):
-              var button = Button.new()
-              button.text = title
-              button.position = pos
-              button.size = Vector2(110, 65)
-              layer.add_child(button)
-              button.button_down.connect(func(): set_direction(direction, true))
-              button.button_up.connect(func(): set_direction(direction, false))
+      [preset.0.options]
+      custom_template/debug=""
+      custom_template/release=""
+      gradle_build/use_gradle_build=false
+      package/unique_name="com.kemalfendi03.perangerila"
+      package/name="Perang Gerila Malaysia"
+      package/signed=true
+      EOF
 
-          func set_direction(direction, active):
-              var value = 1.0 if active else 0.0
-              if direction == "up":
-                  movement.y = -value
-              elif direction == "down":
-                  movement.y = value
-              elif direction == "left":
-                  movement.x = -value
-              elif direction == "right":
-                  movement.x = value
+  - name: Configure Java and Godot
+    shell: bash
+    run: |
+      set -eux
 
-          func _physics_process(delta):
-              if player == null:
-                  return
+      mkdir -p /github/home/.config/godot
+      mkdir -p /github/home/.android
 
-              player.velocity.x = movement.x * 5.0
-              player.velocity.z = movement.y * 5.0
-              player.velocity.y -= 20.0 * delta
-              player.move_and_slide()
-
-              for enemy in enemies:
-                  if is_instance_valid(enemy):
-                      var direction = player.global_position - enemy.global_position
-                      direction.y = 0
-                      if direction.length() > 1.5 and direction.length() < 15:
-                          enemy.global_position += direction.normalized() * delta
-
-          func shoot():
-              var target = null
-              var nearest = 15.0
-
-              for enemy in enemies:
-                  if is_instance_valid(enemy):
-                      var distance = enemy.global_position.distance_to(player.global_position)
-                      if distance < nearest:
-                          nearest = distance
-                          target = enemy
-
-              if target != null:
-                  enemies.erase(target)
-                  target.queue_free()
-                  score += 1
-                  update_hud()
-
-          func update_hud():
-              if hud:
-                  hud.text = "PERANG GERILA MALAYSIA\nMusuh ditumpaskan: " + str(score)
-          EOF
-
-          cat > game/export_presets.cfg <<'EOF'
-          [preset.0]
-          name="Android"
-          platform="Android"
-          runnable=true
-          advanced_options=false
-          dedicated_server=false
-          custom_features=""
-          export_filter="all_resources"
-          include_filter=""
-          exclude_filter=""
-          export_path="../build/PerangGerila.apk"
-          encryption_include_filters=""
-          encryption_exclude_filters=""
-          encrypt_pck=false
-          encrypt_directory=false
-
-          [preset.0.options]
-          custom_template/debug=""
-          custom_template/release=""
-          gradle_build/use_gradle_build=false
-          package/unique_name="com.kemalfendi03.perangerila"
-          package/name="Perang Gerila Malaysia"
-          package/signed=true
-          EOF
-- name: Configure Java and Godot
-  shell: bash
-  run: |
-  mkdir -p /github/home/.config/godot
-  mkdir -p /github/home/.android
-  
       JAVA_PATH="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
 
-    keytool -genkeypair -v \
-      -keystore /github/home/.android/debug.keystore \
-      -storepass android \
-      -alias androiddebugkey \
-      -keypass android \
-      -dname "CN=Android Debug,O=Android,C=US" \
-      -keyalg RSA \
-      -keysize 2048 \
-      -validity 10000
+      keytool -genkeypair -v \
+        -keystore /github/home/.android/debug.keystore \
+        -storepass android \
+        -alias androiddebugkey \
+        -keypass android \
+        -dname "CN=Android Debug,O=Android,C=US" \
+        -keyalg RSA \
+        -keysize 2048 \
+        -validity 10000
 
-    cat > /github/home/.config/godot/editor_settings-4.tres <<EOF
-    [gd_resource type="EditorSettings" format=3]
-    [resource]
-    export/android/java_sdk_path = "$JAVA_PATH"
-    export/android/debug_keystore = "/github/home/.android/debug.keystore"
-    export/android/debug_keystore_user = "androiddebugkey"
-    export/android/debug_keystore_pass = "android"
-    EOF
-      - name: Import project
-        shell: bash
-        run: godot --headless --editor --path game --quit
+      cat > /github/home/.config/godot/editor_settings-4.tres <<EOF
+      [gd_resource type="EditorSettings" format=3]
+      [resource]
+      export/android/java_sdk_path = "$JAVA_PATH"
+      export/android/debug_keystore = "/github/home/.android/debug.keystore"
+      export/android/debug_keystore_user = "androiddebugkey"
+      export/android/debug_keystore_pass = "android"
+      EOF
 
-      - name: Export APK
-        shell: bash
-        run: godot --headless --path game --export-debug "Android" build/PerangGerila.apk
+  - name: Import project
+    shell: bash
+    run: godot --headless --editor --path game --quit
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Perang-Gerila-APK
-          path: build/PerangGerila.apk
+  - name: Export APK
+    shell: bash
+    run: godot --headless --path game --export-debug "Android" build/PerangGerila.apk
+
+  - name: Check APK
+    shell: bash
+    run: test -s build/PerangGerila.apk
+
+  - name: Upload APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: Perang-Gerila-APK
+      path: build/PerangGerila.apk
