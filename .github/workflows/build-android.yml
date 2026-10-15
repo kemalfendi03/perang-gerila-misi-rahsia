@@ -10,10 +10,32 @@ jobs:
       image: barichello/godot-ci:4.4.1
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create game
+      - name: Install Android requirements
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y openjdk-17-jdk unzip wget
+
+          echo "Checking Android SDK..."
+          find / -type d -name "platform-tools" 2>/dev/null | head -10
+          echo "Checking Java..."
+          java -version
+
+      - name: Install Godot export templates
+        shell: bash
+        run: |
+          mkdir -p /github/home/.local/share/godot/export_templates
+          cd /tmp
+          wget -q https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_export_templates.tpz
+          mkdir -p templates
+          unzip -q Godot_v4.4.1-stable_export_templates.tpz -d templates
+          mkdir -p /github/home/.local/share/godot/export_templates/4.4.1.stable
+          cp -r templates/templates/* /github/home/.local/share/godot/export_templates/4.4.1.stable/
+
+      - name: Create game project
         shell: bash
         run: |
           mkdir -p game build
@@ -28,7 +50,6 @@ jobs:
           [display]
           window/size/viewport_width=1280
           window/size/viewport_height=720
-          window/handheld/orientation=1
 
           [rendering]
           renderer/rendering_method="gl_compatibility"
@@ -49,12 +70,12 @@ jobs:
 
           var player: CharacterBody3D
           var enemies: Array[Node3D] = []
-          var health := 100
           var score := 0
-          var move_dir := Vector2.ZERO
+          var movement := Vector2.ZERO
           var hud: Label
 
           func _ready():
+              randomize()
               make_world()
               make_player()
               make_enemies()
@@ -62,38 +83,29 @@ jobs:
 
           func make_world():
               var ground = MeshInstance3D.new()
-              var mesh = PlaneMesh.new()
-              mesh.size = Vector2(100, 100)
-              ground.mesh = mesh
-              var mat = StandardMaterial3D.new()
-              mat.albedo_color = Color(0.12, 0.24, 0.10)
-              ground.material_override = mat
+              var plane = PlaneMesh.new()
+              plane.size = Vector2(100, 100)
+              ground.mesh = plane
+              var material = StandardMaterial3D.new()
+              material.albedo_color = Color(0.12, 0.25, 0.10)
+              ground.material_override = material
               add_child(ground)
 
               var light = DirectionalLight3D.new()
               light.rotation_degrees = Vector3(-55, -25, 0)
-              light.light_energy = 1.3
               add_child(light)
 
-              var env = WorldEnvironment.new()
-              var environment = Environment.new()
-              environment.background_mode = Environment.BG_SKY
-              environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-              environment.ambient_light_color = Color(0.5, 0.55, 0.5)
-              env.environment = environment
-              add_child(env)
-
-              for i in range(35):
+              for i in range(30):
                   var tree = MeshInstance3D.new()
                   var trunk = CylinderMesh.new()
                   trunk.top_radius = 0.18
                   trunk.bottom_radius = 0.3
-                  trunk.height = 2.8
+                  trunk.height = 3.0
                   tree.mesh = trunk
-                  tree.position = Vector3(randf_range(-35,35), 1.4, randf_range(-35,35))
-                  var tm = StandardMaterial3D.new()
-                  tm.albedo_color = Color(0.25, 0.14, 0.07)
-                  tree.material_override = tm
+                  tree.position = Vector3(randf_range(-35, 35), 1.5, randf_range(-35, 35))
+                  var bark = StandardMaterial3D.new()
+                  bark.albedo_color = Color(0.25, 0.14, 0.07)
+                  tree.material_override = bark
                   add_child(tree)
 
           func make_player():
@@ -103,18 +115,14 @@ jobs:
 
               var body = MeshInstance3D.new()
               var capsule = CapsuleMesh.new()
-              capsule.radius = 0.4
-              capsule.height = 1.8
               body.mesh = capsule
               var uniform = StandardMaterial3D.new()
-              uniform.albedo_color = Color(0.2, 0.32, 0.16)
+              uniform.albedo_color = Color(0.2, 0.35, 0.15)
               body.material_override = uniform
               player.add_child(body)
 
               var collision = CollisionShape3D.new()
               var shape = CapsuleShape3D.new()
-              shape.radius = 0.4
-              shape.height = 1.8
               collision.shape = shape
               player.add_child(collision)
 
@@ -127,16 +135,15 @@ jobs:
           func make_enemies():
               for i in range(6):
                   var enemy = Node3D.new()
-                  enemy.position = Vector3(randf_range(-15,15), 0.9, randf_range(-15,15))
+                  enemy.position = Vector3(randf_range(-15, 15), 0.9, randf_range(-15, 15))
                   add_child(enemy)
 
-                  var mesh = MeshInstance3D.new()
-                  var capsule = CapsuleMesh.new()
-                  mesh.mesh = capsule
-                  var mat = StandardMaterial3D.new()
-                  mat.albedo_color = Color(0.65, 0.12, 0.1)
-                  mesh.material_override = mat
-                  enemy.add_child(mesh)
+                  var model = MeshInstance3D.new()
+                  model.mesh = CapsuleMesh.new()
+                  var uniform = StandardMaterial3D.new()
+                  uniform.albedo_color = Color(0.7, 0.12, 0.1)
+                  model.material_override = uniform
+                  enemy.add_child(model)
                   enemies.append(enemy)
 
           func make_hud():
@@ -145,80 +152,78 @@ jobs:
 
               hud = Label.new()
               hud.position = Vector2(20, 20)
-              hud.add_theme_font_size_override("font_size", 26)
+              hud.add_theme_font_size_override("font_size", 24)
               layer.add_child(hud)
               update_hud()
 
-              add_button(layer, "MAJU", Vector2(40, 470), Vector2(130, 65), "up")
-              add_button(layer, "UNDUR", Vector2(40, 545), Vector2(130, 65), "down")
-              add_button(layer, "KIRI", Vector2(180, 545), Vector2(110, 65), "left")
-              add_button(layer, "KANAN", Vector2(180, 470), Vector2(110, 65), "right")
-              add_button(layer, "TEMBAK", Vector2(980, 520), Vector2(180, 75), "fire")
+              add_button(layer, "MAJU", Vector2(30, 450), "up")
+              add_button(layer, "UNDUR", Vector2(30, 530), "down")
+              add_button(layer, "KIRI", Vector2(150, 530), "left")
+              add_button(layer, "KANAN", Vector2(150, 450), "right")
 
-          func add_button(layer, caption, pos, size, action):
+              var fire = Button.new()
+              fire.text = "TEMBAK"
+              fire.position = Vector2(950, 500)
+              fire.size = Vector2(200, 80)
+              layer.add_child(fire)
+              fire.pressed.connect(shoot)
+
+          func add_button(layer, title, pos, direction):
               var button = Button.new()
-              button.text = caption
+              button.text = title
               button.position = pos
-              button.size = size
-              button.add_theme_font_size_override("font_size", 22)
+              button.size = Vector2(110, 65)
               layer.add_child(button)
+              button.button_down.connect(func(): set_direction(direction, true))
+              button.button_up.connect(func(): set_direction(direction, false))
 
-              if action == "fire":
-                  button.pressed.connect(shoot)
-              else:
-                  button.button_down.connect(func(): set_move(action, true))
-                  button.button_up.connect(func(): set_move(action, false))
-
-          func set_move(action, active):
-              var amount = 1.0 if active else 0.0
-              if action == "up":
-                  move_dir.y = -amount
-              elif action == "down":
-                  move_dir.y = amount
-              elif action == "left":
-                  move_dir.x = -amount
-              elif action == "right":
-                  move_dir.x = amount
+          func set_direction(direction, active):
+              var value = 1.0 if active else 0.0
+              if direction == "up":
+                  movement.y = -value
+              elif direction == "down":
+                  movement.y = value
+              elif direction == "left":
+                  movement.x = -value
+              elif direction == "right":
+                  movement.x = value
 
           func _physics_process(delta):
               if player == null:
                   return
 
-              var direction = Vector3(move_dir.x, 0, move_dir.y).normalized()
-              player.velocity.x = direction.x * 5.0
-              player.velocity.z = direction.z * 5.0
+              player.velocity.x = movement.x * 5.0
+              player.velocity.z = movement.y * 5.0
               player.velocity.y -= 20.0 * delta
               player.move_and_slide()
 
               for enemy in enemies:
                   if is_instance_valid(enemy):
-                      var distance = enemy.global_position.distance_to(player.global_position)
-                      if distance < 12:
-                          var toward = player.global_position - enemy.global_position
-                          toward.y = 0
-                          if toward.length() > 1.5:
-                              enemy.global_position += toward.normalized() * delta * 1.2
+                      var direction = player.global_position - enemy.global_position
+                      direction.y = 0
+                      if direction.length() > 1.5 and direction.length() < 15:
+                          enemy.global_position += direction.normalized() * delta
 
           func shoot():
-              var nearest = null
-              var best_distance = 15.0
+              var target = null
+              var nearest = 15.0
 
               for enemy in enemies:
                   if is_instance_valid(enemy):
                       var distance = enemy.global_position.distance_to(player.global_position)
-                      if distance < best_distance:
-                          best_distance = distance
-                          nearest = enemy
+                      if distance < nearest:
+                          nearest = distance
+                          target = enemy
 
-              if nearest != null:
-                  nearest.queue_free()
-                  enemies.erase(nearest)
+              if target != null:
+                  enemies.erase(target)
+                  target.queue_free()
                   score += 1
                   update_hud()
 
           func update_hud():
               if hud:
-                  hud.text = "PERANG GERILA MALAYSIA\nKesihatan: %d   Musuh ditumpaskan: %d" % [health, score]
+                  hud.text = "PERANG GERILA MALAYSIA\nMusuh ditumpaskan: " + str(score)
           EOF
 
           cat > game/export_presets.cfg <<'EOF'
@@ -247,16 +252,27 @@ jobs:
           package/signed=true
           EOF
 
+      - name: Configure Java and Godot
+        shell: bash
+        run: |
+          mkdir -p /github/home/.config/godot
+          JAVA_PATH="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
+          cat > /github/home/.config/godot/editor_settings-4.tres <<EOF
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/java_sdk_path = "$JAVA_PATH"
+          EOF
+
       - name: Import project
         shell: bash
         run: godot --headless --editor --path game --quit
 
-      - name: Export Android APK
+      - name: Export APK
         shell: bash
         run: godot --headless --path game --export-debug "Android" build/PerangGerila.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Perang-Gerila-Android
+          name: Perang-Gerila-APK
           path: build/PerangGerila.apk
